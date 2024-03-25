@@ -12,6 +12,13 @@ client = OpenAI()
 CONFIG = DefaultConfig()
 
 my_assistant = client.beta.assistants.retrieve(assistant_id=CONFIG.ASSISTANT_ID)
+# we can update this assistant
+my_assistant = client.beta.assistants.update(
+    my_assistant.id,
+    name=f"{my_assistant.name} - Updated",
+    model=f"{CONFIG.MODEL}",
+)
+
 my_thread = client.beta.threads.create()
 
 
@@ -76,4 +83,4 @@ class AssistantBot(ActivityHandler):
             ):
                 pass
             else:
-                raise Exception(f"Run status: {keep_retrieving_run.status}")
+                raise RuntimeError(f"Run status: {keep_retrieving_run.status}")
