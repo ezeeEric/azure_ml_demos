@@ -22,61 +22,53 @@ class AssistantBot(ActivityHandler):
 
         for member in members_added:
             if member.id != turn_context.activity.recipient.id:
-                await turn_context.send_activity(
-                    MessageFactory.text(f"Hello, I'm a generic ChatGPT bot!")
-                )
+                output_text = f"Assistant Name: {my_assistant.name}\n\n"
+                for key, val in my_assistant:
+                    output_text += f"{key}: {val}\n\n"
+                output_text += f"Thread ID: {my_thread.id}\n"
+                await turn_context.send_activity(MessageFactory.text(output_text))
 
     async def on_message_activity(self, turn_context: TurnContext):
-        user_message = turn_context.activity.text
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": f"{user_message}"},
-        ]
 
-        # chat_response = self.generate_chatgpt_response(messages)
-        chat_response = self.generate_assistant_response(messages, user_message)
+        chat_response = self.generate_assistant_response(
+            user_message=turn_context.activity.text
+        )
 
         if chat_response:
             await turn_context.send_activity(MessageFactory.text(chat_response))
         else:
             await turn_context.send_activity(
-                MessageFactory.text("I'm sorry, I didn't understand your request.")
+                MessageFactory.text(
+                    f"Invalid user message: {turn_context.activity.text}"
+                )
             )
 
-    def generate_assistant_response(self, messages: list, user_message: str):
-        # Step 3: Add a Message to a Thread
-        my_thread_message = client.beta.threads.messages.create(
+    def generate_assistant_response(self, user_message: str):
+        _ = client.beta.threads.messages.create(
             thread_id=my_thread.id,
             role="user",
             content=f"{user_message}",
         )
-        print(f"This is the message object: {my_thread_message} \n")
 
-        # Step 4: Run the Assistant
-        my_run = client.beta.threads.runs.create(
-            thread_id=my_thread.id,
-            assistant_id=my_assistant.id,
-            instructions="Please address the user as Rok Benko.",
+        # TODO streaming events in run
+        # stream = client.beta.threads.runs.create(
+        #     thread_id=my_thread.id, assistant_id=my_assistant.id, stream=True
+        # )
+
+        # for event in stream:
+        #     print(event)
+
+        run = client.beta.threads.runs.create(
+            thread_id=my_thread.id, assistant_id=my_assistant.id
         )
-        print(f"This is the run object: {my_run} \n")
 
-        while my_run.status in ["queued", "in_progress"]:
+        while run.status in ["queued", "in_progress"]:
             keep_retrieving_run = client.beta.threads.runs.retrieve(
-                thread_id=my_thread.id, run_id=my_run.id
+                thread_id=my_thread.id, run_id=run.id
             )
-            print(f"Run status: {keep_retrieving_run.status}")
 
             if keep_retrieving_run.status == "completed":
-                print("\n")
-
-                # Step 6: Retrieve the Messages added by the Assistant to the Thread
                 all_messages = client.beta.threads.messages.list(thread_id=my_thread.id)
-
-                print("------------------------------------------------------------ \n")
-
-                print(f"User: {my_thread_message.content[0].text.value}")
-                print(f"Assistant: {all_messages.data[0].content[0].text.value}")
-
                 return all_messages.data[0].content[0].text.value
             elif (
                 keep_retrieving_run.status == "queued"
@@ -84,5 +76,4 @@ class AssistantBot(ActivityHandler):
             ):
                 pass
             else:
-                print(f"Run status: {keep_retrieving_run.status}")
-                break
+                raise Exception(f"Run status: {keep_retrieving_run.status}")
